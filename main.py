@@ -1,90 +1,93 @@
-import asyncio
+==> import asyncio
 import aiohttp
 import os
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 
-# ===============================
-# CONFIGURATION
-# ===============================
+# =============================
+# CONFIG
+# =============================
 
 TOKEN = "8418191088:AAFEANI4tnCVeTKo6eMheSrc2C3OVnAdC7A"
 
-# whitelist users
-ALLOWED_USERS = {
-    702815281
-}
+ALLOWED_USERS = {702815281}
 
-# ===============================
+# =============================
 # BOT INIT
-# ===============================
+# =============================
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# ===============================
-# PUBLIC RESEARCH SOURCES
-# ===============================
+# =============================
+# HEALTH CHECK SERVER (Render Fix)
+# =============================
 
-SOURCES = [
-    "https://github.com/",
-    "https://t.me/",
-    "https://reddit.com/user/"
-]
+async def health(request):
+    return web.Response(text="OK")
 
-# ===============================
-# ACCESS CONTROL
-# ===============================
+async def start_web_server():
 
-def is_allowed(user_id: int) -> bool:
-    return user_id in ALLOWED_USERS
+    app = web.Application()
+    app.router.add_get("/", health)
 
-# ===============================
-# RESEARCH ENGINE
-# ===============================
+    runner = web.AppRunner(app)
+    await runner.setup()
 
-async def research_engine(query: str):
+    port = int(os.environ.get("PORT", 10000))
+
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# =============================
+# RESEARCH ENGINE (Public sources only)
+# =============================
+
+async def research_engine(query):
+
+    sources = [
+        "https://github.com/",
+        "https://reddit.com/user/",
+        "https://t.me/"
+    ]
 
     signals = []
 
-    try:
-        async with aiohttp.ClientSession() as session:
+    async with aiohttp.ClientSession() as session:
 
-            tasks = []
+        tasks = []
 
-            for source in SOURCES:
+        for source in sources:
 
-                url = source + query
+            url = source + query
 
-                async def worker(link):
-                    try:
-                        async with session.get(link, timeout=5) as response:
-                            if response.status == 200:
-                                return link
-                    except:
-                        return None
+            async def worker(link):
+                try:
+                    async with session.get(link, timeout=5) as resp:
+                        if resp.status == 200:
+                            return link
+                except:
+                    return None
 
-                tasks.append(worker(url))
+            tasks.append(worker(url))
 
-            results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks)
 
-            signals = [r for r in results if r]
-
-    except Exception:
-        pass
+        signals = [r for r in results if r]
 
     confidence = min(len(signals) * 0.4, 1.0)
 
     return signals, confidence
 
-# ===============================
-# TELEGRAM COMMANDS
-# ===============================
+# =============================
+# COMMANDS
+# =============================
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
 
-    if not is_allowed(message.from_user.id):
+    if message.from_user.id not in ALLOWED_USERS:
         await message.answer("⛔ Access denied")
         return
 
@@ -98,13 +101,13 @@ Commands:
 @dp.message(Command("scan"))
 async def scan(message: types.Message):
 
-    if not is_allowed(message.from_user.id):
+    if message.from_user.id not in ALLOWED_USERS:
         return
 
     try:
         query = message.text.split()[1]
 
-        await message.answer("🧠 Research processing...")
+        await message.answer("🧠 Research analysis running...")
 
         signals, confidence = await research_engine(query)
 
@@ -115,17 +118,20 @@ async def scan(message: types.Message):
                 f"\nConfidence: {confidence:.2f}"
             )
         else:
-            await message.answer("❌ No public research signals found")
+            await message.answer("❌ Nothing found")
 
-    except Exception:
+    except:
         await message.answer("Usage: /scan username")
 
-# ===============================
+# =============================
 # MAIN LOOP
-# ===============================
+# =============================
 
 async def main():
-    await dp.start_polling(bot)
+    await asyncio.gather(
+        dp.start_polling(bot),
+        start_web_server()
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
