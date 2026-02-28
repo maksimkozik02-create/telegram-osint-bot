@@ -7,7 +7,7 @@ from aiogram.filters import Command
 # CONFIGURATION
 # =============================
 
-TOKEN = "8418191088:AAGsJ1BXtn3O5lQ2BFHz77ste-JJTBKH74D0"
+TOKEN = "8418191088:AAEaLSjTJc7XqUBE341iK_jzzTFwkMsZ_Hs"
 
 # Telegram ID whitelist
 ALLOWED_USERS = [
